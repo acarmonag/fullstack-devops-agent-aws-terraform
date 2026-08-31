@@ -304,6 +304,59 @@ owns the CI track before changing trigger scope.)
 
 ---
 
+## Fix batch and validation
+
+All defects below were fixed and pushed as a single commit (`9d66587`,
+`fix: repair CI pipeline content defects (1-5)`), preceded by two structural
+prerequisite commits that were required before any run could fire at all:
+
+- `fbd28c3` — `.github/workflows/ci.yaml` lived at
+  `codebase/rdicidr-0.1.0/.github/workflows/ci.yaml`; GitHub Actions only
+  discovers workflows in `.github/workflows/` at the **repository root**
+  (this repo's root is `assessment-cc-agentic-devops-aws-terraform-sr-01`,
+  one level above `codebase/rdicidr-0.1.0`). `gh api .../actions/workflows`
+  returned `{"total_count":0}` before the move — zero runs had ever fired on
+  any branch. Moved the file to repo-root `.github/workflows/ci.yaml`, added
+  `defaults.run.working-directory: codebase/rdicidr-0.1.0` and repo-root-
+  relative cache paths/hashFiles args so the jobs still target the app
+  directory.
+- `8dbabfd` — Defect 6 fix (trigger branch filters), applied ahead of the
+  rest of the batch because without it PR #1 (`bugfix/agentic-repair` ->
+  `devel`) matched neither `push` nor `pull_request` filters and no run
+  would ever trigger, structurally identical to the path problem above.
+
+A real failing baseline run exists at
+[run 33355344799](https://github.com/acarmonag/fullstack-devops-agent-aws-terraform/actions/runs/33355344799)
+(triggered by PR #1 before any content-defect fix was applied): `install`
+failed with `npm ERR! notsup Unsupported engine ... wanted node >=15.0.0
+<16.0.0 (current: node 14.21.3, npm 6.14.18)`, confirming Defect 4 and
+blocking `lint`/`test`/`build` from ever starting.
+
+One additional defect surfaced by the fix batch itself and fixed in a
+follow-up commit (`0f92e43`, iterate step): the `install` job's
+`npm install` step rewrote `package-lock.json` in place during install
+(platform-specific optional-dependency resolution differs between the
+runner and the committed lockfile), so its cache-save `hashFiles()` value
+diverged from `test`/`lint`'s cache-restore `hashFiles()` value for the
+same commit — the exact reproducibility risk already flagged in this
+report's open questions. Fixed by switching to `npm ci`, which never
+mutates the lockfile.
+
+Final green run:
+[run 33355764944](https://github.com/acarmonag/fullstack-devops-agent-aws-terraform/actions/runs/33355764944) —
+`install` -> `test`/`lint` -> `build` all succeeded in order, no skipped
+steps.
+
+| Defect | Root cause | Fix | Evidence |
+|---|---|---|---|
+| 1. Missing `eslint-plugin-prettier`/`eslint-config-prettier` | Referenced in `eslintConfig.extends` but never declared as a dependency or present in the lockfile | Added `eslint-plugin-prettier@4.2.1`, `eslint-config-prettier@8.10.0` as devDependencies (ESLint 7.28+ peer range); also downgraded `prettier` 3.3.1 -> 2.8.8 (prettier 3's CJS entry uses a dynamic `import()` that throws `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` under ESLint 7's `v8-compile-cache`-wrapped CLI — a real ESLint-7/prettier-3 incompatibility, not fixable via plugin version choice alone) | Local `npm run lint` before fix: `ESLint couldn't find the plugin "eslint-plugin-prettier"`; after fix: `0 problems` |
+| 2. 5 files fail `npm run prettier` | Files not Prettier-formatted (no `.prettierrc`, defaults apply) | `npx prettier --write ./src/`; only `src/App.js` had a real diff | `npm run prettier` after fix: `All matched files use Prettier code style!` |
+| 3. `App.test.js` asserts against unset `REACT_APP_API_URL` | No fixed expected value defined anywhere the workflow runs | Pinned `REACT_APP_API_URL: http://localhost:8080` in the `test` job's `env:`; asserted that literal in `src/App.test.js` | Baseline run never reached `test` (blocked by Defect 4); final run 33355764944 `test` job green |
+| 4. `node-version: '14'` contradicts `engines.node >=15.0.0 <16.0.0` | Workflow left on a Node 14 baseline after `package.json` `engines` was updated to Node 15.x/npm 7.x | Changed `node-version` to `'15'` in all four jobs | Baseline run 33355344799 `install` step: `npm ERR! notsup Unsupported engine for rdicidr@0.1.0 ... current: {"node":"14.21.3","npm":"6.14.18"}` |
+| 5. `build` job cache-restore key (`deps-...`) never matches `install`'s save key (`node-modules-...`) | Copy/paste inconsistency; `build` has no fallback install step so a miss is fatal | Changed `build`'s restore key to `node-modules-${{ hashFiles(...) }}` to match | `build` job green in run 33355764944, using restored cache (no `react-scripts: command not found`) |
+| 6. Trigger branch filters (`push:[main,feature-*]`, `pull_request:[main]`) don't match repo's branch discipline | Workflow written for a trunk-based/hyphenated-branch model; repo constitution mandates `devel`/`stage` + `feature/**`/`bugfix/**` | Added `devel`, `stage` to both filters; `'feature-*'` -> `'feature/**'`, added `'bugfix/**'` | Before fix: `gh run list` empty for PR #1 (no run ever triggered); after fix: run 33355344799 fired on the same PR |
+| 7. (new, surfaced by fix batch) `install` job's `npm install` rewrites `package-lock.json`, desyncing cache-save/restore `hashFiles()` | `npm install` (not `npm ci`) can mutate the lockfile on install even when it already satisfies `package.json`, e.g. via platform-specific optional-dependency resolution | Changed `install` job's `run: npm install` to `run: npm ci` | Run 33355599589: save key `node-modules-38004d6a8...` vs restore key `node-modules-5c9f3ff1...` for the same commit -> `Cache not found` -> `sh: 1: react-scripts: not found` / `sh: 1: eslint: not found` (exit 127) in `test`/`lint`; run 33355764944 (post-fix): both keys match, all jobs green |
+
 ## Open questions / lower-confidence items (not asserted as defects)
 
 - **No `permissions:` block** is set at the workflow or job level. Default
@@ -318,8 +371,6 @@ owns the CI track before changing trigger scope.)
   finishes), so a build could report green while the test job is still red. Whether
   `build` is *intended* to gate on `test` passing wasn't specified anywhere I could find,
   so this is flagged as a design question, not asserted as a bug.
-- **`npm install` vs `npm ci` in the `install` job.** `npm install` can update
-  `package-lock.json` if `package.json` and the lockfile drift, and is generally
-  discouraged in CI in favor of `npm ci` for reproducible installs. Locally, `npm ci`
-  succeeded cleanly against the committed lockfile (see Defect 4 evidence section), so
-  this isn't causing a current failure, but it's worth flagging as a reproducibility risk.
+- ~~**`npm install` vs `npm ci` in the `install` job.**~~ Resolved — this risk
+  materialized for real (see Defect 7 in the table above: it broke cache-key
+  matching on `ubuntu-latest`) and was fixed by switching to `npm ci`.
