@@ -3,10 +3,13 @@ FROM node:15-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm install \
+    && rm -rf node_modules/prettier \
+    && npm install --no-save eslint-plugin-prettier@3.4.1 eslint-config-prettier@8.3.0 prettier@2.8.8
 
 COPY . .
-RUN npm run build
+RUN npx prettier --write ./src \
+    && npm run build
 
 FROM nginx:1.21-alpine
 
