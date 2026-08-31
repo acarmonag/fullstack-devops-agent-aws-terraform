@@ -4,10 +4,15 @@ on:
   push:
     branches:
       - main
-      - 'feature-*'
+      - devel
+      - stage
+      - 'feature/**'
+      - 'bugfix/**'
   pull_request:
     branches:
       - main
+      - devel
+      - stage
 
 defaults:
   run:
