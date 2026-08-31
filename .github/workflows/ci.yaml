@@ -9,6 +9,10 @@ on:
     branches:
       - main
 
+defaults:
+  run:
+    working-directory: codebase/rdicidr-0.1.0
+
 jobs:
   install:
     runs-on: ubuntu-latest
@@ -27,8 +31,8 @@ jobs:
       - name: Cache node_modules
         uses: actions/cache/save@v3
         with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
+          path: codebase/rdicidr-0.1.0/node_modules
+          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
 
   lint:
     needs: [install]
@@ -45,8 +49,8 @@ jobs:
       - name: Restore node_modules
         uses: actions/cache/restore@v3
         with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
+          path: codebase/rdicidr-0.1.0/node_modules
+          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
 
       - name: Run linter
         run: npm run lint
@@ -69,8 +73,8 @@ jobs:
       - name: Restore node_modules
         uses: actions/cache/restore@v3
         with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
+          path: codebase/rdicidr-0.1.0/node_modules
+          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
 
       - name: Run tests
         env:
@@ -92,8 +96,8 @@ jobs:
       - name: Restore node_modules
         uses: actions/cache/restore@v3
         with:
-          path: node_modules
-          key: deps-${{ hashFiles('package-lock.json') }}
+          path: codebase/rdicidr-0.1.0/node_modules
+          key: deps-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
 
       - name: Build project
         run: npm run build
