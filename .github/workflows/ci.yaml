@@ -4,10 +4,19 @@ on:
   push:
     branches:
       - main
-      - 'feature-*'
+      - devel
+      - stage
+      - 'feature/**'
+      - 'bugfix/**'
   pull_request:
     branches:
       - main
+      - devel
+      - stage
+
+defaults:
+  run:
+    working-directory: codebase/rdicidr-0.1.0
 
 jobs:
   install:
@@ -19,16 +28,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '14'
+          node-version: '15'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Cache node_modules
         uses: actions/cache/save@v3
         with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
+          path: codebase/rdicidr-0.1.0/node_modules
+          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
 
   lint:
     needs: [install]
@@ -40,13 +49,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '14'
+          node-version: '15'
 
       - name: Restore node_modules
         uses: actions/cache/restore@v3
         with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
+          path: codebase/rdicidr-0.1.0/node_modules
+          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
 
       - name: Run linter
         run: npm run lint
@@ -55,29 +64,6 @@ jobs:
         run: npm run prettier
 
   test:
-    needs: [install]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '14'
-
-      - name: Restore node_modules
-        uses: actions/cache/restore@v3
-        with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
-
-      - name: Run tests
-        env:
-          CI: true
-        run: npm run test
-
-  build:
     needs: [lint]
     runs-on: ubuntu-latest
     steps:
@@ -87,13 +73,37 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '14'
+          node-version: '15'
 
       - name: Restore node_modules
         uses: actions/cache/restore@v3
         with:
-          path: node_modules
-          key: deps-${{ hashFiles('package-lock.json') }}
+          path: codebase/rdicidr-0.1.0/node_modules
+          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
+
+      - name: Run tests
+        env:
+          CI: true
+          REACT_APP_API_URL: http://localhost:8080
+        run: npm run test
+
+  build:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '15'
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v3
+        with:
+          path: codebase/rdicidr-0.1.0/node_modules
+          key: node-modules-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
 
       - name: Build project
         run: npm run build
