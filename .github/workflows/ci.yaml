@@ -64,7 +64,7 @@ jobs:
         run: npm run prettier
 
   test:
-    needs: [install]
+    needs: [lint]
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -88,7 +88,7 @@ jobs:
         run: npm run test
 
   build:
-    needs: [lint]
+    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
