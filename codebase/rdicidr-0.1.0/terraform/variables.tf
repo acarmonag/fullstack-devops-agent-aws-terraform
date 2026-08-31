@@ -10,10 +10,26 @@ variable "app_name" {
   default     = "rdicidr"
 }
 
-variable "container_image" {
+variable "environment" {
   type        = string
-  description = "ECR image URI"
-  default     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/rdicidr:latest"
+  description = "Deployment environment (devel or stage) — interpolated into all named resources so devel/stage never collide"
+
+  validation {
+    condition     = contains(["devel", "stage"], var.environment)
+    error_message = "environment must be \"devel\" or \"stage\"."
+  }
+}
+
+variable "aws_account_id" {
+  type        = string
+  description = "AWS account ID that owns the ECR repository"
+  default     = "208211371137"
+}
+
+variable "container_image_tag" {
+  type        = string
+  description = "Tag of the image to deploy from the ECR repository"
+  default     = "latest"
 }
 
 variable "container_port" {
@@ -25,7 +41,7 @@ variable "container_port" {
 variable "health_check_path" {
   type        = string
   description = "Health check endpoint path"
-  default     = "/healthz"
+  default     = "/health"
 }
 
 variable "desired_count" {
